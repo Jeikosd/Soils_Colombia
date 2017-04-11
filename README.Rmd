@@ -12,4 +12,32 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Which information we have?
+# What information do we have?
+
+```{r, message = FALSE, include=FALSE}
+library(tidyverse)
+library(raster)
+library(foreign)
+library(rgdal)
+library(spdplyr)
+library(stringr)
+
+```
+
+
+```{r message = FALSE, include=FALSE}
+path_data <- 'D:/CIAT/USAID/Soils/data/'
+
+## Textura informacion CIAT
+raster_textura <- raster(paste0(path_data, 'Soil_Colombia/Clasificación textural/Clasificacion textural.tif'))  ## 
+
+# plot(raster_textura )
+
+
+
+```
+
+
+
+
+
