@@ -9,7 +9,7 @@ library(broom)
 library(maptools)
 
 
-path_data <- 'D:/CIAT/USAID/Soils/data/'
+path_data <- 'data/'
 
 ## Textura informacion CIAT
 raster_textura <- raster(paste0(path_data, 'Soil_Colombia/Clasificación textural/Clasificacion textural.tif'))  ## Clasificación de texturas
@@ -100,7 +100,7 @@ extract_by_polygon <- function(i, r, shape){
 library(foreach)
 library(doSNOW) 
 
-cl <- makeCluster(3)
+cl <- makeCluster(25)
 registerDoSNOW(cl)  ## For Windows
 
 to_ <- 1:dim(soils_dpto)[1]
@@ -143,32 +143,31 @@ mode_df <- function(data, var, n_top){
   return(data)
 }
 
-top_text <- tolima_text %>%
+top_text <- soils_dpto_text %>%
   mutate(mode_ = map(data, mode_df, 'ClaseText', 1)) %>%
   unnest(mode_) %>%
   dplyr::select(-data)
 
-tolima_mod <- inner_join(tolima, top_text, by = 'NOM_MUNICI', copy = TRUE) 
-  
-
-tolima_mod_map <- tolima_mod %>%
-  tidy() %>%
-  inner_join(., tolima_mod, by = c('id'= 'OBJECTID'), copy = TRUE)
-
-tolima_mod
-# tolima@data[['NOM_MUNICI']] <- rownames(tolima@data)
-
-tolima_mod  %>%
-  dplyr::select(OBJECTID, NOM_MUNICI, ClaseText) %>%
-  broom::tidy(region = 'OBJECTID')
+soils_dpto_Sptext <- inner_join(soils_dpto, top_text, by = 'NOM_MUNICI', copy = TRUE) %>%
+  dplyr::select(-nombre) %>%
+  as_data_frame()
 
   
-soils_dpto %>%
-  tidy(region = c('NOMBRE_DPT'))
+# soils_dpto_mod <- soils_dpto
+# soils_dpto_mod@data <- soils_dpto_Sptext
+
+soils_dpto_tidy <- soils_dpto %>%
+  tidy(region = 'NOM_MUNICI') %>%
+  inner_join(., soils_dpto_Sptext, by = c('id'= 'NOM_MUNICI')) %>%
+  tbl_df()
+
+
+
+# soils_dpto_tidy
   
   
 g <- ggplot() + 
-  geom_polygon(data = tolima_mod_map, aes(long, lat, group = group),
+  geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group),
                fill="white", colour = "black", size = 0.1) + 
   coord_equal() + 
   scale_x_continuous(expand=c(0,0)) + 
@@ -177,9 +176,9 @@ g <- ggplot() +
   theme_bw()  
 
 h <- g + 
-  geom_polygon(data = tolima_mod_map, aes(long, lat, group = group, fill = ClaseText),
+  geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group, fill = ClaseText),
                colour = "black", size = 0.1,  alpha = 0.5) + 
-  scale_fill_manual(values = c("#dfc27d", "#a6611a", "#80cdc1", "#018571"), name= "Textura")   
+  scale_fill_manual(values = c("#8c510a", "#bf812d", "#c7eae5", "#80cdc1", "#35978f", "#01665e" , "#003c30"), name= "Textura")   
 
   
 
@@ -203,15 +202,6 @@ region <- crop(shape_colombia, extent_region) %>%
   tidy(region = 'NOM_MUNICI') %>%
   tbl_df()
 
-soils_dpto_fortify <- soils_dpto %>%
-  tidy(region = c('NOMBRE_DPT')) %>%
-  tbl_df()
-
-extent_region %>%
-  filter(str_detect(NOMBRE_DPT, 'TOLIMA|CÓRDOBA|VALLE|CASANARE'))
-
-
-
 
 g <- ggplot() + 
   geom_polygon(data = region, aes(long, lat, group = group),
@@ -223,9 +213,18 @@ g <- ggplot() +
   theme_bw() 
 
 h <- g + 
-  geom_polygon(data = soils_dpto_fortify, aes(long, lat, group = group, fill = id),
+  geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group, fill = ClaseText),
                colour = "black", size = 0.1,  alpha = 0.5) + 
-  scale_fill_manual(values = c("#dfc27d", "#a6611a", "#80cdc1", "#018571"), name= "Departamentos") 
+  scale_fill_manual(values = c("#8c510a",
+                               "#bf812d",
+                               "#c7eae5",
+                               "#80cdc1",
+                               "#35978f",
+                               "#01665e",
+                               "#003c30"), name= "Textura") +
+  ggtitle("Clases Texturales Mayesi")
+
+
   # geom_path(color="black")
 
 soils_dpto_raster <- crop(raster_textura, region)
@@ -237,9 +236,9 @@ ggplot() +
   theme(legend.position = "none")
   
 
-h +
-  geom_tile(data=soils_dpto_raster,aes(x, y, fill= Clasificacion_textural)) +
-  theme(legend.position = "none")
+# h +
+#   geom_tile(data=soils_dpto_raster,aes(x, y, fill= Clasificacion_textural)) +
+#   theme(legend.position = "none")
 ####
 
 
