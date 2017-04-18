@@ -149,7 +149,7 @@ soils_dpto_df <- soils_dpto %>%
 soils_dpto_text <- inner_join(soils_dpto_df, values_text, by = 'NOM_MUNICI')
 
 soils_dpto_text <- soils_dpto_text %>%
-  nest(-NOM_MUNICI)
+  nest(-NOM_MUNICI, -NOMBRE_DPT)
 
 
 
@@ -298,7 +298,7 @@ library(ggrepel)
 
 r <- h + 
   geom_label_repel(data = centroids.df,
-                   aes(label = name, x = long, y = lat, size = n),
+                   aes(label = name, x = long, y = lat),
                    fontface = 'bold',
                    box.padding = unit(0.35, "lines"),
                    point.padding = unit(0.5, "lines"),
@@ -306,8 +306,63 @@ r <- h +
                    
   )
 
-###
+## luego continuar con la comparacion para JR ##
+### graficos necesarios para los muchachos ####
 
+## calcular top 3 texturas dpto mun
+
+soils_dpto_Sptext %>%
+  dplyr::select(NOMBRE_DPT, NOM_MUNICI, ClaseText)
+  
+
+
+top_text <- soils_dpto_text %>%
+  mutate(mode_ = map(data, mode_df, 'ClaseText', 3)) %>%
+  unnest(mode_)
+
+# filtrar para los municipios de estudio
+
+mun_usaid <- c('YOPAL', 'LORICA', 'IBAGUÉ', 'LA UNIÓN', 'ESPINAL', 'CERETÉ')
+mun_usaid <- paste(mun_usaid, collapse = '|')
+mun_usaid_text <- filter(top_text, str_detect( NOM_MUNICI, mun_usaid))
+
+# filter(soils_dpto_text, str_detect(NOMBRE_DPT, 'VALLE')) %>%
+#   dplyr::select(NOM_MUNICI) %>%
+#   magrittr::extract2(1)
+
+mun_usaid_text <- mun_usaid_text %>%
+  mutate(top_textura = fct_reorder(factor(n), n, .desc = FALSE), 
+         NOM_MUNICI = fct_reorder(NOM_MUNICI, n, .desc = FALSE))
+
+ggplot(mun_usaid_text, aes(NOM_MUNICI, top_textura, fill = ClaseText)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  scale_fill_manual(values = c("#8c510a",
+                               "#bf812d",
+                               "#c7eae5",
+                               "#80cdc1",
+                               "#35978f",
+                               "#01665e",
+                               "#003c30"), name= "Textura") +
+  geom_text(aes(NOM_MUNICI, top_textura, label = ClaseText), 
+            position = position_dodge(0.99),
+            vjust= - 1)
+
+
+## Los muchachos Necesitan PH
+  
+
+# ggplot(mun_usaid_text, aes(NOM_MUNICI, factor(n), fill = ClaseText)) +
+#   geom_bar(stat="identity", position=position_dodge()) +
+#   scale_fill_manual(values = c("#8c510a",
+#                                "#bf812d",
+#                                "#c7eae5",
+#                                "#80cdc1",
+#                                "#35978f",
+#                                "#01665e",
+#                                "#003c30"), name= "Textura") +
+#   geom_text(aes(NOM_MUNICI, factor(n), label = ClaseText),
+#             position = position_dodge(0.99),
+#             vjust= - 1)
 
 
 
