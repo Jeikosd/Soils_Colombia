@@ -63,10 +63,12 @@ rasta <- read_csv(paste0(path_data, 'Soil_Rasta/Rastas_3.csv'),cols(
 
 management_cordoba <- read_csv(paste0(path_data, 'Soil_Rasta/Practicas_Cordoba.csv'))
 
+identifier <- read_csv(paste0(path_data, 'Soil_Rasta/identificadores.csv'))
+
 ## sacar textura para Cordoba (merge entre rasta y el archivo de Practicas cordoba by ID_LOTE)
 
 vars_ID <- management_cordoba %>%
-  dplyr::select(ID_LOTE, MUNICIPIO, DEPARTAMENTO) 
+  dplyr::select(ID_LOTE, MUNICIPIO, DEPARTAMENTO, LAT_LOTE, LONG_LOTE) 
 
 soil_rasta_df <- inner_join(rasta, vars_ID, by = 'ID_LOTE')
 
@@ -150,21 +152,7 @@ soils_dpto_text <- soils_dpto_text %>%
   nest(-NOM_MUNICI)
 
 
-##
-mode_df <- function(data, var, n_top){
-  
-  # data <- values_text
-  # var <- 'ClaseText'
-  # n_top <- 10
-  
-  suppressMessages(data <-  select_(data, var) %>%
-                     group_by_(var) %>%
-                     summarise(n = n()) %>%
-                     top_n(n_top) %>%
-                     arrange(desc(n)))
-  
-  return(data)
-}
+
 
 top_text <- soils_dpto_text %>%
   mutate(mode_ = map(data, mode_df, 'ClaseText', 1)) %>%
@@ -228,7 +216,7 @@ region <- crop(shape_colombia, extent_region) %>%
 
 g <- ggplot() + 
   geom_polygon(data = region, aes(long, lat, group = group),
-               fill="white", colour = "black", size = 0.1) + 
+               fill="white", colour = "gray", size = 0.1,  alpha = 0.5) + 
   coord_equal() + 
   scale_x_continuous(expand=c(0,0)) + 
   scale_y_continuous(expand=c(0,0)) +
@@ -249,10 +237,10 @@ h <- g +
 
 
 
-shape_soils_rasta <- inner_join(soils_dpto, soil_rasta_df, by = c('NOMBRE_DPT', 'NOM_MUNICI'))
+# shape_soils_rasta <- inner_join(soils_dpto, soil_rasta_df, by = c('NOMBRE_DPT', 'NOM_MUNICI'))
 
-dplyr::select(soils_dpto, NOM_MUNICI, NOMBRE_DPT) 
-dplyr::select(soil_rasta_df, MUNICIPIO, DEPARTAMENTO)
+# dplyr::select(soils_dpto, NOM_MUNICI, NOMBRE_DPT) 
+# dplyr::select(soil_rasta_df, MUNICIPIO, DEPARTAMENTO)
 
 filter(soils_dpto, str_detect(NOMBRE_DPT, 'VALLE'))
 filter(soil_rasta_df, str_detect(DEPARTAMENTO, zonas)) %>%
@@ -266,18 +254,116 @@ filter(soil_rasta_df, str_detect(DEPARTAMENTO, zonas)) %>%
 
 
 
-## Mostrar las texturas de rasta por departamento y municipio
-soil_rasta_mun <- soil_rasta_df %>%
-  dplyr::select(PH, ESPESORES, TEXTURAS, DEPARTAMENTO, MUNICIPIO) %>%
-  group_by(TEXTURAS, MUNICIPIO) %>%
-  summarize(n = n()) %>%
+
+
+
+## Mostrar las texturas de rasta por lat y long
+soil_rasta_vars <- soil_rasta_df %>%
+  dplyr::select(NO_CAPAS, PH, TEXTURAS, DEPARTAMENTO, MUNICIPIO, LAT_LOTE, LONG_LOTE) %>%
+  mutate(ID = 1:length(NO_CAPAS))
+ 
+## arreglar un individuo por textura (plotear la textura de la primera profundidad)
+
+tidy_rasta_soil <- soil_rasta_vars %>%
+  mutate(TEXTURAS = strsplit(TEXTURAS, ",")) %>%
+  unnest(TEXTURAS) %>% ## seleccionamos la textura de la primera profundidad
+  group_by(ID) %>%
+  filter(row_number() == 1)
+
+tidy_rasta_soil <- inner_join(tidy_rasta_soil, identifier, by = c('TEXTURAS' = 'Spanish_key'))
+
+## calculos por departamento y municipio
+
+rasta_textura <- tidy_rasta_soil %>%
+  group_by(MUNICIPIO) %>%
+  nest() %>%
+  mutate(mode_ = map(data, mode_df, 'name', 1)) %>%
+  unnest(mode_)
+
+rasta_textura_sp <- inner_join(soils_dpto, rasta_textura, by = c('NOM_MUNICI' = 'MUNICIPIO'))
+
+rasta_textura_tidy <- soils_dpto %>%
+  tidy(region = 'NOM_MUNICI') %>%
+  inner_join(., rasta_textura, by = c('id' = 'MUNICIPIO')) %>%
+  tbl_df()
+
+
+
+centroids.df <- as_data_frame(coordinates(rasta_textura_sp)) %>%
+  rename(long = V1, lat = V2)
+centroids.df <- data.frame(centroids.df, data.frame(rasta_textura_sp)) %>%
+  as_data_frame()
+
+library(ggrepel)
+
+r <- h + 
+  geom_label_repel(data = centroids.df,
+                   aes(label = name, x = long, y = lat, size = n),
+                   fontface = 'bold',
+                   box.padding = unit(0.35, "lines"),
+                   point.padding = unit(0.5, "lines"),
+                   segment.color = 'black'
+                   
+  )
+
+###
+
+
+
+
+
+
+
+nest_rasta_soil <- tidy_rasta_soil %>%
+  group_by(ID) %>%
+  mutate(row = paste0('depth_', row_number())) %>%
+  nest()
+
+## prueba
+rasta_textura <- mutate(nest_rasta_soil, mode_textura = map(data, mode_df, 'name', 1), no_depth = map(data, length('name'))) %>%
+  unnest(mode_textura, .drop = FALSE) %>%
+  unnest(no_depth)
+  group_by(ID) %>%
+  filter(row_number()==1) %>%
   ungroup()
 
-# sacar el top
-proof <- soil_rasta_mun %>%
-  group_by(MUNICIPIO) %>%
-  top_n(1) 
+unnest(rasta_textura, data)
 
+## solo un individuo por ID? será mejor?
+tidy_rasta_soil %>%
+  group_by(ID) %>%
+  mutate(row = paste0('depth_', row_number())) %>%
+  spread(row, TEXTURAS) %>%
+  ungroup()
+
+
+# sacar el top
+
+rasta_top <- soil_rasta_mun %>%
+  group_by(MUNICIPIO) %>%
+  top_n(1) %>%
+  ungroup()
+
+soil_rasta_df %>%
+  mutate(TEXTURAS = strsplit(TEXTURAS, ",")) %>%
+  unnest(TEXTURAS) %>%
+  dplyr::select(TEXTURAS) %>%
+  magrittr::extract2(1) %>%
+  unique()
+
+
+proof %>%
+  mutate(TEXTURAS = strsplit(TEXTURAS, ",")) %>%
+  unnest(TEXTURAS) %>%
+  group_by(MUNICIPIO) %>%
+  mutate(row = row_number()) %>%
+  spread(row, TEXTURAS)
+  
+# dat %>% mutate(to = strsplit(to, ",")) %>%
+#   unnest(to) %>%
+#   group_by(MUNICIPIO) %>%
+#   mutate(row = row_number()) %>%
+#   spread(row, to)
 
 separate(proof, TEXTURAS, into, sep = " ", remove = TRUE, convert = FALSE)
 
