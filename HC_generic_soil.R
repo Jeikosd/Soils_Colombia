@@ -1,4 +1,43 @@
 
+## function that calcu textura
+## you need to have CLAY, SILT and SAND columns in the df (a data frame object R)
+calc_texture <- function(df){
+  
+  require(soiltexture)
+  require(dplyr)
+  # my.text
+  # df <- pmap(list(path, start, end), fread_HC)[[1]]
+  
+  df <- df %>%
+    dplyr::select(CLAY, SILT, SAND) %>%
+    summarise_each(funs(mean))
+  
+  CLAY <- dplyr::select(df, CLAY) %>%
+    magrittr::extract2(1)
+  
+  SILT <- dplyr::select(df, SILT) %>%
+    magrittr::extract2(1)
+  
+  SAND <- dplyr::select(df, SAND) %>%
+    magrittr::extract2(1)
+  
+  texture_df <- data.frame(CLAY, SILT, SAND)
+  
+  texture_df <- TT.normalise.sum(texture_df)
+  
+  class_texture <- TT.points.in.classes(tri.data    = texture_df, 
+                                        class.sys   = "USDA.TT",
+                                        PiC.type    = "t", 
+                                        collapse    = ";"
+  )
+  
+  return(class_texture)
+  
+}
+
+
+
+
 
 # function to calculte star and end to load line from HC.SOL
 # path_soil
@@ -28,7 +67,7 @@ pos_load_HC <- function(path){
 # end : line to end to load
 # you need to calcule start and end previously
 
-fread_HC<- function(path, start, end){
+fread_HC<- function(path, start, end, ...){
   
   # start <- init_extract[1]
   # end <- end_extract[1]
@@ -41,14 +80,23 @@ fread_HC<- function(path, start, end){
   header <- scan(path, what = "character", skip = 5, nlines = 1, quiet = T)
   header <- header[!str_detect('@', header)]
   
-  start <- dplyr::select(positions, 1) %>%
-    magrittr::
+  # start <- dplyr::select(positions, 2) %>%
+  #   magrittr::extract2(1)
+  
+  # end <- dplyr::select(positions, 3) %>%
+    # magrittr::extract2(1)
   
   soil_df <- fread(path, skip = start, header = F, fill = TRUE, nrows = end) %>%
     tbl_df() %>%
     purrr::discard(is_logical)
   
   colnames(soil_df) <- header 
+  
+  soil_df <- soil_df %>%
+    mutate(SLSA = 100 - (SLCL + SLSI)) %>%
+    mutate(CLAY = SLCL,
+           SILT = SLSI,
+           SAND = SLSA)
   
   return(soil_df)
   
@@ -59,33 +107,31 @@ fread_HC<- function(path, start, end){
 ##
 
 
-readHC_soil <- function(path, start, end) {
+readHC_soil <- function(path) {
   
   ## path <- path_soil
 
+  positions <- pos_load_HC(path)
   
-  fread_HC_soil(path, start, end)
-  pmap(list(data, start, end), fread_HC_soil)
+  # fread_HC(path_soil, 6, 7)
   
-  data_frame(HC = generic_soil, start, end) %>%
-    mutate(inf_soils = pmap(list(data, init_extract, end_extract), fread_HC_soil))
+  generic_soil <- dplyr::select(positions, 1) %>%
+    magrittr::extract2(1)
+  
+  start <- dplyr::select(positions, 2) %>%
+    magrittr::extract2(1)
+  
+  end <- dplyr::select(positions, 3) %>%
+  magrittr::extract2(1)
+  
+  # pmap(list(path, start, end), fread_HC)
+  
+  HC_soils <- data_frame(HC = generic_soil, start, end) %>%
+    mutate(inf_soils = pmap(list(path, start, end), fread_HC)) %>%
+    mutate(texture = map(inf_soils, calc_texture)) %>%
+    unnest(texture, .drop = FALSE)
+  
+  return(HC_soils)
   
 } 
 
-
-
-calc_texture <- function(clay, silt, sand){
-  
-  require(soiltexture)
-  # my.text
-  texture_df <- data.frame(clay, silt, sand)
-  
-  class_texture <- TT.points.in.classes(tri.data    = texture_df, 
-                                        class.sys   = "USDA.TT",
-                                        PiC.type    = "t", 
-                                        collapse    = ";"
-  )
-  
-  return(tbl_df(class_texture))
-  
-}
