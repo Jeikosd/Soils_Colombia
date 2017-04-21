@@ -177,21 +177,21 @@ soils_dpto_tidy <- soils_dpto %>%
 # soils_dpto_tidy
   
   
-g <- ggplot() + 
-  geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group),
-               fill="white", colour = "black", size = 0.1) + 
-  coord_equal() + 
-  scale_x_continuous(expand=c(0,0)) + 
-  scale_y_continuous(expand=c(0,0)) +
-  labs(x='Longitude', y='Latitude') +
-  theme_bw()  
-
-h <- g + 
-  geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group, fill = ClaseText),
-               colour = "black", size = 0.1,  alpha = 0.5) + 
-  scale_fill_manual(values = c("#8c510a", "#bf812d", "#c7eae5", "#80cdc1", "#35978f", "#01665e" , "#003c30"), name= "Textura")   
-
-  
+# g <- ggplot() + 
+#   geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group),
+#                fill="white", colour = "black", size = 0.1) + 
+#   coord_equal() + 
+#   scale_x_continuous(expand=c(0,0)) + 
+#   scale_y_continuous(expand=c(0,0)) +
+#   labs(x='Longitude', y='Latitude') +
+#   theme_bw()  
+# 
+# h <- g + 
+#   geom_polygon(data = soils_dpto_tidy, aes(long, lat, group = group, fill = ClaseText),
+#                colour = "black", size = 0.1,  alpha = 0.5) + 
+#   scale_fill_manual(values = c("#8c510a", "#bf812d", "#c7eae5", "#80cdc1", "#35978f", "#01665e" , "#003c30"), name= "Textura")   
+# 
+#   
 
   
 # tolima_df %>%
@@ -268,7 +268,8 @@ tidy_rasta_soil <- soil_rasta_vars %>%
   mutate(TEXTURAS = strsplit(TEXTURAS, ",")) %>%
   unnest(TEXTURAS) %>% ## seleccionamos la textura de la primera profundidad
   group_by(ID) %>%
-  filter(row_number() == 1)
+  filter(row_number() == 1) %>%
+  ungroup()
 
 tidy_rasta_soil <- inner_join(tidy_rasta_soil, identifier, by = c('TEXTURAS' = 'Spanish_key'))
 
@@ -304,15 +305,16 @@ r <- h +
                    point.padding = unit(0.5, "lines"),
                    segment.color = 'black'
                    
-  )
+  ) +
+  ggtitle("Clases Texturales Mayesi vs Rasta")
 
 ## luego continuar con la comparacion para JR ##
 ### graficos necesarios para los muchachos ####
 
 ## calcular top 3 texturas dpto mun
 
-soils_dpto_Sptext %>%
-  dplyr::select(NOMBRE_DPT, NOM_MUNICI, ClaseText)
+# soils_dpto_Sptext %>%
+  # dplyr::select(NOMBRE_DPT, NOM_MUNICI, ClaseText)
   
 
 
@@ -330,6 +332,7 @@ mun_usaid_text <- filter(top_text, str_detect( NOM_MUNICI, mun_usaid))
 #   dplyr::select(NOM_MUNICI) %>%
 #   magrittr::extract2(1)
 
+library(forcats)
 mun_usaid_text <- mun_usaid_text %>%
   mutate(top_textura = fct_reorder(factor(n), n, .desc = FALSE), 
          NOM_MUNICI = fct_reorder(NOM_MUNICI, n, .desc = FALSE))
@@ -348,8 +351,51 @@ ggplot(mun_usaid_text, aes(NOM_MUNICI, top_textura, fill = ClaseText)) +
             vjust= - 1)
 
 
-## Los muchachos Necesitan PH
+## Los muchachos Necesitan PH (boxplot y añadir los top 3 como puntos)
+
+rasta_ph <- tidy_rasta_soil %>%
+  filter(str_detect(MUNICIPIO, mun_usaid)) 
   
+rasta_ph <- rasta_ph %>%
+  mutate(MUNICIPIO = fct_reorder(MUNICIPIO, PH, .desc = FALSE))
+
+ggplot(rasta_ph , aes(MUNICIPIO, PH)) +
+  geom_boxplot() +
+  ggtitle("PH Municipios") +
+  labs(ylab('PH'))
+
+
+## Anadir coincidencia HGEN suelos DSSAT
+
+library(data.table)
+## a~nadir leer encabezado
+header <- scan(paste0(path_data, 'Soil_HC/HC.SOL'), what = "character", skip = 5, nlines = 1, quiet = T)
+header <- header[!str_detect('@', header)]
+proof <- read_lines(paste0(path_data, 'Soil_HC/HC.SOL'))
+
+# grep("SLB", proof)
+# str_which(proof, "SLB")
+
+str_subset(proof, 'HC_GEN') %>%
+  sub(" .*$", "", .)
+
+
+str_detect(proof, coll('HC_GEN'))
+str_count("one,   two three 4,,,, 5 6", "\\S+")
+
+## match SLB (@  SLB)
+HC_soil <- fread(paste0(path_data, 'Soil_HC/HC.SOL'), skip = 6, header = F, fill = TRUE, nrows = 6) %>%
+  tbl_df()
+
+  
+HC_soil %>%
+  purrr::discard(is_logical)
+
+HC_soil %>%
+  select_if(is_logical)
+
+
+colnames(HC_soil) <- header
 
 # ggplot(mun_usaid_text, aes(NOM_MUNICI, factor(n), fill = ClaseText)) +
 #   geom_bar(stat="identity", position=position_dodge()) +
