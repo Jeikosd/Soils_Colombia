@@ -110,7 +110,7 @@ fread_HC<- function(path, start, end, ...){
 readHC_soil <- function(path) {
   
   ## path <- path_soil
-
+  require(tidyverse)
   positions <- pos_load_HC(path)
   
   # fread_HC(path_soil, 6, 7)

@@ -152,6 +152,22 @@ soils_dpto_text <- soils_dpto_text %>%
   nest(-NOM_MUNICI, -NOMBRE_DPT)
 
 
+mode_df <- function(data, var, n_top){
+  
+  # data <- values_text
+  # var <- 'ClaseText'
+  # n_top <- 10
+  
+  suppressMessages(data <-  select_(data, var) %>%
+                     group_by_(var) %>%
+                     summarise(n = n()) %>%
+                     top_n(n_top) %>%
+                     arrange(desc(n))
+                   
+  )
+  
+  return(data)
+}
 
 
 top_text <- soils_dpto_text %>%
