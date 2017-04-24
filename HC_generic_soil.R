@@ -43,6 +43,7 @@ calc_texture <- function(df){
 # path_soil
 pos_load_HC <- function(path){
   
+  require(stringr)
   # path <- path_soil
   HC_soil <- read_lines(path)
   
@@ -76,6 +77,7 @@ fread_HC<- function(path, start, end, ...){
   # tbl_df()
   require(tidyverse)
   require(magrittr)
+  require(soiltexture)
   # positions
   header <- scan(path, what = "character", skip = 5, nlines = 1, quiet = T)
   header <- header[!str_detect('@', header)]

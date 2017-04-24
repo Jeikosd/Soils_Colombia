@@ -7,6 +7,7 @@ library(stringr)
 library(rgeos)
 library(broom)
 library(maptools)
+library(soiltexture)
 
 
 path_data <- 'data/'
@@ -23,7 +24,7 @@ class_textura <- class_textura %>%
 shape_colombia <- readOGR(dsn = paste0(path_data, 'Shape_Colombia/Municipios_SIGOT_geo.shp'),
                           layer = 'Municipios_SIGOT_geo')
 
-# shape_colombia_fortify <- fortify(shape_colombia)
+
 ## Cambiando la codificacion de las columnas necesarias
 
 shape_colombia <- shape_colombia %>%
@@ -62,13 +63,22 @@ rasta <- read_csv(paste0(path_data, 'Soil_Rasta/Rastas_3.csv'),cols(
 ## Management Cordoba
 
 management_cordoba <- read_csv(paste0(path_data, 'Soil_Rasta/Practicas_Cordoba.csv'))
+# read.csv(paste0(path_data, 'Soil_Rasta/Practicas_Cordoba.csv'))
 
 identifier <- read_csv(paste0(path_data, 'Soil_Rasta/identificadores.csv'))
 
 ## sacar textura para Cordoba (merge entre rasta y el archivo de Practicas cordoba by ID_LOTE)
 
 vars_ID <- management_cordoba %>%
-  dplyr::select(ID_LOTE, MUNICIPIO, DEPARTAMENTO, LAT_LOTE, LONG_LOTE) 
+  dplyr::select(ID_LOTE, MUNICIPIO, DEPARTAMENTO, TIPO_CULTIVO, LAT_LOTE, LONG_LOTE) %>%
+  filter(!is.na(LONG_LOTE), !is.na(LAT_LOTE)) %>%
+  mutate(lat = classify_coords(LAT_LOTE, long = F), long = classify_coords(LONG_LOTE))
+
+# filter(vars_ID, is.na(long))
+# filter(vars_ID, is.na(lat))
+
+##
+
 
 soil_rasta_df <- inner_join(rasta, vars_ID, by = 'ID_LOTE')
 
@@ -92,7 +102,7 @@ extent_region <- soils_dpto %>%
   extent()
 
 
-text_dptos <- crop(raster_textura, extent_region)
+text_dptos <- crop(raster_textura, extent_region)  ## textura Mayesi para la zona de estudio
 
 # plot(text_dptos)
 # plot(soils_dpto, add = T)
@@ -150,6 +160,9 @@ soils_dpto_text <- inner_join(soils_dpto_df, values_text, by = 'NOM_MUNICI')
 
 soils_dpto_text <- soils_dpto_text %>%
   nest(-NOM_MUNICI, -NOMBRE_DPT)
+
+
+
 
 
 mode_df <- function(data, var, n_top){
@@ -275,7 +288,8 @@ filter(soil_rasta_df, str_detect(DEPARTAMENTO, zonas)) %>%
 
 ## Mostrar las texturas de rasta por lat y long
 soil_rasta_vars <- soil_rasta_df %>%
-  dplyr::select(NO_CAPAS, PH, TEXTURAS, DEPARTAMENTO, MUNICIPIO, LAT_LOTE, LONG_LOTE) %>%
+  filter(TIPO_CULTIVO == 'Maiz') %>%
+  dplyr::select(NO_CAPAS, PH, TEXTURAS, DEPARTAMENTO, MUNICIPIO, TIPO_CULTIVO, LAT_LOTE, LONG_LOTE, lat, long) %>%
   mutate(ID = 1:length(NO_CAPAS))
  
 ## arreglar un individuo por textura (plotear la textura de la primera profundidad)
@@ -287,8 +301,24 @@ tidy_rasta_soil <- soil_rasta_vars %>%
   filter(row_number() == 1) %>%
   ungroup()
 
-tidy_rasta_soil <- inner_join(tidy_rasta_soil, identifier, by = c('TEXTURAS' = 'Spanish_key'))
 
+tidy_rasta_soil <- inner_join(tidy_rasta_soil, identifier, by = c('TEXTURAS' = 'Spanish_key'))
+text_dptos
+
+### buffer puntos
+## illustrating the varying size of a buffer (expressed in meters) 
+## on a longitude/latitude raster
+raster::extract(text_dptos, dplyr::select(tidy_rasta_soil, long, lat), buffer= 4000)
+
+coordinates(tidy_rasta_soil) <- c( "long", "lat")
+sr <- '+proj=tmerc +lat_0=4.596200416666666 +lon_0=-74.07750791666666 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs'
+proj4string(tidy_rasta_soil) <- CRS(sr)
+pc <- spTransform(tidy_rasta_soil, CRS(sr)) 
+distInMeters <- 3000
+dplyr::row_number(pc, 1)
+pc100km <- gBuffer( pc[1, ], width=distInMeters, byid=TRUE )
+
+Landcover <- extract(NLCD, sites_transformed, buffer=buffer)
 ## calculos por departamento y municipio
 
 rasta_textura <- tidy_rasta_soil %>%
@@ -297,7 +327,7 @@ rasta_textura <- tidy_rasta_soil %>%
   mutate(mode_ = map(data, mode_df, 'name', 1)) %>%
   unnest(mode_)
 
-rasta_textura_sp <- inner_join(soils_dpto, rasta_textura, by = c('NOM_MUNICI' = 'MUNICIPIO'))
+# rasta_textura_sp <- inner_join(soils_dpto, rasta_textura, by = c('NOM_MUNICI' = 'MUNICIPIO'))
 
 rasta_textura_tidy <- soils_dpto %>%
   tidy(region = 'NOM_MUNICI') %>%
