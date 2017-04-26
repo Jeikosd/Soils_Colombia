@@ -78,6 +78,7 @@ fread_HC<- function(path, start, end, ...){
   require(tidyverse)
   require(magrittr)
   require(soiltexture)
+  require(data.table)
   # positions
   header <- scan(path, what = "character", skip = 5, nlines = 1, quiet = T)
   header <- header[!str_detect('@', header)]
